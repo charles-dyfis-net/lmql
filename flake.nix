@@ -1,11 +1,14 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
+    poetry2nix.url = "github:nix-community/poetry2nix";
+    poetry2nix.inputs.nixpkgs.follows = "nixpkgs";
     llamaDotCpp.url = "github:ggerganov/llama.cpp";
     flake-utils.url = "github:numtide/flake-utils";
   };
-  outputs = { self, nixpkgs, flake-utils, llamaDotCpp }: let
+  outputs = { self, nixpkgs, flake-utils, llamaDotCpp, poetry2nix }: let
     llamaDotCppFlake = llamaDotCpp;
+    poetry2nixFlake = poetry2nix;
     nonSystemSpecificOutputs = {
       overlays = {
         noSentencePieceCustomMallocOnDarwin = (final: prev: {
@@ -24,8 +27,9 @@
       cp -- "$smallSourceFile" "$out"
     '';
     poetryOverrides = final: prev: {
+      accessible-pygments = prev.accessible-pygments.overridePythonAttrs (old: { buildInputs = (old.buildInputs or []) ++ [final.setuptools]; });
       accelerate = prev.accelerate.overridePythonAttrs (old: { buildInputs = (old.buildInputs or []) ++ [ final.filelock final.jinja2 final.networkx final.setuptools final.sympy ]; });
-      attrs = prev.attrs.overridePythonAttrs (old: { buildInputs = (old.buildInputs or []) ++ [ final.hatchling final.hatch-fancy-pypi-readme final.hatch-vcs ]; });
+      # attrs = prev.attrs.overridePythonAttrs (old: { buildInputs = (old.buildInputs or []) ++ [ final.hatchling final.hatch-fancy-pypi-readme final.hatch-vcs ]; });
       llama-cpp-python = prev.llama-cpp-python.overridePythonAttrs (old: {
         buildInputs = (old.buildInputs or []) ++ [ final.setuptools ];
         prePatch = (old.prePatch or "") + "\n" + ''
@@ -37,6 +41,11 @@
           cd "$oldWD" || exit
         '';
       });
+      pandoc = prev.pandoc.overridePythonAttrs (old: { buildInputs = (old.buildInputs or []) ++ [ final.setuptools ]; });
+      # sphinx-theme-builder tries to run downloads at build time; Nix disallows this, so install from wheels
+      pydata-sphinx-theme = prev.pydata-sphinx-theme.override { preferWheel = true; }; #.overridePythonAttrs (old: { buildInputs = (old.buildInputs or []) ++ [ final.sphinx-theme-builder ]; });
+      sphinx-book-theme = prev.sphinx-book-theme.override { preferWheel = true; }; # .overridePythonAttrs (old: { buildInputs = (old.buildInputs or []) ++ [ final.sphinx-theme-builder ]; });
+      sphinx-theme-builder = prev.sphinx-theme-builder.overridePythonAttrs (old: { buildInputs = (old.buildInputs or []) ++ [ final.flit-core ]; });
       safetensors = prev.safetensors.overridePythonAttrs (old: let lockFile = makeFOD final.pkgs (./flake.d/cargo-deps/. + "/${old.pname}-${old.version}-Cargo.lock"); in {
         buildInputs = (old.buildInputs or []) ++ [ final.setuptools final.setuptools-rust final.pkgs.iconv ];
         nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ final.pkgs.cargo final.pkgs.rustc final.pkgs.rustPlatform.cargoSetupHook ];
@@ -46,6 +55,7 @@
           ${old.patchPhase or ""}
         '';
       });
+      shibuya = prev.shibuya.overridePythonAttrs (old: { buildInputs = (old.buildInputs or []) ++ [ final.setuptools ]; });
       tiktoken = prev.tiktoken.overridePythonAttrs (old: let lockFile = makeFOD final.pkgs (./flake.d/cargo-deps/. + "/${old.pname}-${old.version}-Cargo.lock"); in {
         buildInputs = (old.buildInputs or []) ++ [ final.setuptools final.setuptools-rust final.pkgs.iconv ];
         nativeBuildInputs = (old.nativeBuildInputs or []) ++ [ final.pkgs.cargo final.pkgs.rustc final.pkgs.rustPlatform.cargoSetupHook ];
@@ -76,21 +86,30 @@
       inherit system;
       overlays = [
         nonSystemSpecificOutputs.overlays.noSentencePieceCustomMallocOnDarwin
+        poetry2nixFlake.overlay
       ];
     };
     poetryEnv = pkgs.poetry2nix.mkPoetryEnv {
       python = pkgs.python310;
       projectDir = self;
+      # projectDir = "${self}/src";
       overrides = pkgs.poetry2nix.overrides.withDefaults poetryOverrides;
       editablePackageSources = {
         lmql = self;
       };
     };
-  in {
+  in rec {
     legacyPackages = pkgs;
     packages = {
       llamaDotCpp = llamaDotCppFlake.packages.${system}.default;
-      live = pkgs.mkYarnPackage rec {
+      python = poetryEnv;
+      lmql-docs = pkgs.runCommand "lmql-docs" {
+        python = pkgs.python310.withPackages (p: [p.myst-parser p.pydata-sphinx-theme p.sphinx-book-theme p.nbsphinx]);
+        docSource = ./docs/source;
+      } ''
+        PATH=${pkgs.pandoc}/bin:$PATH ${poetryEnv}/bin/sphinx-build "$docSource" "$out"
+      '';
+      playground-live = pkgs.mkYarnPackage rec {
         pname = "lmql-playground-live";
         inherit version;
         src = ./src/lmql/ui/live;
@@ -98,7 +117,34 @@
         yarnNix = "${src}/yarn.nix";
         packageJSON = "${src}/package.json";
         dontStrip = true;
+
+        buildPhase = ''
+          HOME=$(mktemp -d) yarn --offline build
+        '';
+
+        distPhase = ''
+          # We need a Python interpreter with all the dependencies
+          ln -s ${packages.python}/bin/python "$out/bin/python"
+        '';
       };
+      # content historically served by live.js
+      playground-client-web = pkgs.mkYarnPackage rec {
+        pname = "lmql-playground-client-web";
+        inherit version;
+        src = ./web/browser-build;
+        yarnLock = "${src}/yarn.lock";
+        yarnNix = "${src}/yarn.nix";
+        packageJSON = "${src}/package.json";
+        dontStrip = true;
+        DISABLE_ESLINT_PLUGIN = "true";
+
+        buildPhase = ''
+          HOME=$(mktemp -d) yarn --offline build
+        '';
+
+        distPhase = "true;";
+      };
+      # static content 
       playground-web = pkgs.mkYarnPackage rec {
         pname = "lmql-playground-web";
         inherit version;
@@ -108,24 +154,32 @@
         packageJSON = "${src}/package.json";
         dontStrip = true;
 
-        distPhase = ''
-          cd "$out/libexec/lmql-playground-web" || exit
-          for f in "$out"/libexec/lmql-playground-web/deps/lmql-playground-web/*; do
-            fb=''${f##*/}; src="deps/lmql-playground-web/$fb"; dest="$out/libexec/lmql-playground-web/$fb"
-            [[ -e $dest || -L $dest ]] || ln -s "$src" "$dest"
-          done
-
-          # FIXME: Before this works, we need to build the documentation as a separate derivation, and make doc-snippets point to it
-          ./node_modules/.bin/react-scripts build || exit
-        
-          mkdir -p -- "$out/bin"
-          ln -s ${pkgs.writeShellScript "start-lqml-playground-web" ''
-            bin_script=$BASH_SOURCE
-            [ -s "$bin_script" ] || { echo "ERROR: Could not find running script" >&2; exit 1; }
-            bin_dir=''${bin_script%/*}
-            exec "$bin_dir/../libexec/lmql-playground-web/node_modules/.bin/react-scripts" start "$@"
-          ''} "$out/bin/start-lqml-playground-web"
+        patchPhase  = ''
+          find . -type d -name browser-build -exec rm -rf -- {} +
+          rm -f -- public/doc-snippets
         '';
+
+        DISABLE_ESLINT_PLUGIN = "true";
+
+        buildPhase = ''
+          HOME=$(mktemp -d) yarn --offline build
+        '';
+
+        distPhase = ''
+          shopt -s extglob
+          mv "$out"/libexec/lmql-playground-web/deps/lmql-playground-web/build "$out/content"
+          rm -rf -- "$out"/!(content)
+
+          mkdir -p -- "$out/bin"
+          ln -s ${pkgs.writeShellScript "lmql-playground-run" ''
+            bindir=''${BASH_SOURCE%/*}
+            : addr=''${addr:=127.0.0.1} port=''${port:=3000}
+            echo "Starting web server on $addr:$port..." >&2
+            exec ${packages.python}/bin/python -m http.server --bind "$addr" --directory "$bindir/../content" "$port"
+          ''} "$out/bin/run" 
+        '';
+
+        meta.mainProgram = "run";
       };
       # TODO: Add at entrypoint to run a LMTP server
       # TODO: Add an entrypoint to run a Python interpreter with LMQL and dependencies
@@ -139,13 +193,17 @@
         PYTHONPATH = "${builtins.toString ./src}";
         buildInputs = [
           llamaDotCppFlake.packages.${system}.default
+          pkgs.pandoc
           pkgs.poetry
           pkgs.poetry2nix.cli
         ];
       });
-      poetryMinimal = pkgs.mkShell {
-        name = "minimal-poetry-shell";
+      # tools to run poetry and yarn2nix, and nothing else
+      devMinimal = pkgs.mkShell {
+        name = "minimal-dev-shell";
         buildInputs = [
+          pkgs.yarn
+          pkgs.yarn2nix
           pkgs.poetry
           pkgs.poetry2nix.cli
           (pkgs.python310.withPackages (p: [p.poetry-core]))
