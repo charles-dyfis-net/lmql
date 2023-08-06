@@ -109,7 +109,7 @@
       } ''
         PATH=${pkgs.pandoc}/bin:$PATH ${poetryEnv}/bin/sphinx-build "$docSource" "$out"
       '';
-      playground-live = pkgs.mkYarnPackage rec {
+      playground = pkgs.mkYarnPackage rec {
         pname = "lmql-playground-live";
         inherit version;
         src = ./src/lmql/ui/live;
@@ -130,11 +130,13 @@
 
           ln -s ${pkgs.writeShellScript "lmql-live-run" ''
             bindir=''${BASH_SOURCE%/*}
-            : addr=''${addr:=127.0.0.1} port=''${port:=3004}
+            : addr=''${addr:=127.0.0.1} port=''${port:=3000}
             cd "$bindir/../libexec/liveserve/deps/liveserve" || exit
+            export PATH=$bindir:$PATH
             export PYTHONPATH=${self}/src:$PYTHONPATH
             export NODE_PATH=$out/libexec/node_modules
             export PORT=$port
+            export content_dir=${packages.playground-static-content}/content
             exec "$bindir/node" "live.js"
           ''} "$out/bin/run"
         '';
@@ -142,7 +144,7 @@
         meta.mainProgram = "run";
       };
       # static content 
-      playground-web = pkgs.mkYarnPackage rec {
+      playground-static-content = pkgs.mkYarnPackage rec {
         pname = "lmql-playground-web";
         inherit version;
         src = ./src/lmql/ui/playground;
