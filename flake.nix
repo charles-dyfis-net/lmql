@@ -80,7 +80,7 @@
   in nonSystemSpecificOutputs // flake-utils.lib.eachSystem [ "aarch64-darwin" "x86_64-linux" ] (system: let
     version =
       if self.sourceInfo ? "rev"
-      then "${self.sourceInfo.lastModifiedDate}-${builtins.toString self.sourceInfo.revCount}-${self.sourceInfo.shortRev}"
+      then "${self.sourceInfo.lastModifiedDate}-${self.sourceInfo.shortRev}"
       else "dirty";
     pkgs = import nixpkgs {
       inherit system;
