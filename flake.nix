@@ -119,30 +119,27 @@
         dontStrip = true;
 
         buildPhase = ''
-          HOME=$(mktemp -d) yarn --offline build
+          true
         '';
 
         distPhase = ''
           # We need a Python interpreter with all the dependencies
+          mkdir -p -- $out/bin $out/libexec
           ln -s ${packages.python}/bin/python "$out/bin/python"
-        '';
-      };
-      # content historically served by live.js
-      playground-client-web = pkgs.mkYarnPackage rec {
-        pname = "lmql-playground-client-web";
-        inherit version;
-        src = ./web/browser-build;
-        yarnLock = "${src}/yarn.lock";
-        yarnNix = "${src}/yarn.nix";
-        packageJSON = "${src}/package.json";
-        dontStrip = true;
-        DISABLE_ESLINT_PLUGIN = "true";
+          ln -s ${pkgs.nodejs}/bin/node "$out/bin/node"
 
-        buildPhase = ''
-          HOME=$(mktemp -d) yarn --offline build
+          ln -s ${pkgs.writeShellScript "lmql-live-run" ''
+            bindir=''${BASH_SOURCE%/*}
+            : addr=''${addr:=127.0.0.1} port=''${port:=3004}
+            cd "$bindir/../libexec/liveserve/deps/liveserve" || exit
+            export PYTHONPATH=${self}/src:$PYTHONPATH
+            export NODE_PATH=$out/libexec/node_modules
+            export PORT=$port
+            exec "$bindir/node" "live.js"
+          ''} "$out/bin/run"
         '';
 
-        distPhase = "true;";
+        meta.mainProgram = "run";
       };
       # static content 
       playground-web = pkgs.mkYarnPackage rec {
@@ -184,31 +181,34 @@
       # TODO: Add at entrypoint to run a LMTP server
       # TODO: Add an entrypoint to run a Python interpreter with LMQL and dependencies
     };
-    devShells = {
+    devShells = let
+      jsDevPackages = [
+        pkgs.yarn
+        pkgs.yarn2nix
+      ];
+      pythonDevPackages = [
+        pkgs.pandoc # not python-specific, but used in building docs
+        pkgs.poetry
+        pkgs.poetry2nix.cli
+        (pkgs.python310.withPackages (p: [p.poetry-core]))
+      ];
+      runtimePackages = [
+        llamaDotCppFlake.packages.${system}.default
+        pkgs.nodejs
+      ];
+    in {
       # python interpreter able to import lmql successfully
       default = poetryEnv.env.overrideAttrs (oldAttrs: {
         shellHook = ''
           PS1='[lmql] '"$PS1"
         '';
         PYTHONPATH = "${builtins.toString ./src}";
-        buildInputs = [
-          llamaDotCppFlake.packages.${system}.default
-          pkgs.pandoc
-          pkgs.poetry
-          pkgs.poetry2nix.cli
-        ];
+        buildInputs = jsDevPackages ++ pythonDevPackages ++ runtimePackages;
       });
       # tools to run poetry and yarn2nix, and nothing else
-      devMinimal = pkgs.mkShell {
+      minimal = pkgs.mkShell {
         name = "minimal-dev-shell";
-        buildInputs = [
-          pkgs.yarn
-          pkgs.yarn2nix
-          pkgs.poetry
-          pkgs.poetry2nix.cli
-          (pkgs.python310.withPackages (p: [p.poetry-core]))
-        ];
-
+        buildInputs = jsDevPackages ++ pythonDevPackages;
       };
     };
   });
