@@ -4,6 +4,7 @@ Command Line Interface for lmtp_inference_server.py.
 
 from .lmtp_inference_server import *
 from .utils import rename_model_args
+from .lmtp_balance import balance_main
 
 def serve(model_name, host="localhost", port=8080, cuda=False, dtype=None, static=False, loader=None, **kwargs):
     """
@@ -146,6 +147,16 @@ options:
 
     return kwargs
 
+def cli(args=None):
+    args = args or sys.argv[1:]
+
+    if len(args) > 0 and args[0] == "balance":
+        args = args[1:]
+        balance_main(args)
+        return
+    else:
+        args = argparser(args)
+        lmtp_serve_main(args)
+
 if __name__ == "__main__":
-    args = argparser(sys.argv[1:])
-    lmtp_serve_main(args)
+    cli()
