@@ -602,6 +602,14 @@
       };
     }
     {
+      name = "on_headers___on_headers_1.0.2.tgz";
+      path = fetchurl {
+        name = "on_headers___on_headers_1.0.2.tgz";
+        url  = "https://registry.yarnpkg.com/on-headers/-/on-headers-1.0.2.tgz";
+        sha512 = "pZAE+FJLoyITytdqK0U5s+FIpjN0JP3OzFi/u8Rx+EV5/W+JTWGXG8xFzevE7AjBfDqHv/8vL8qQsIhHnqRkrA==";
+      };
+    }
+    {
       name = "parseurl___parseurl_1.3.3.tgz";
       path = fetchurl {
         name = "parseurl___parseurl_1.3.3.tgz";
