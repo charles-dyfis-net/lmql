@@ -61,6 +61,7 @@ let
   buildOps = {
     accelerate           = addBuildInputs [ "filelock" "jinja2" "networkx" "setuptools" "sympy" ];
     accessible-pygments  = addBuildInputs [ "setuptools" ];
+    aiohttp-sse-client   = addBuildInputs [ "setuptools" ];
     llama-cpp-python     = composeOps (addBuildInputs [ "setuptools" ]) llamaCppUseLlamaBuild;
     pandoc               = addBuildInputs [ "setuptools" ];
     pydata-sphinx-theme  = preferWheel;

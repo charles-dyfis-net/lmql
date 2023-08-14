@@ -19,12 +19,13 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-lmql = { path = "../", extras = ["llama", "hf"] }
+lmql = { path = "../", extras = ["llama", "hf", "replicate"] }
 
 # FIXME: These _should_ have been pulled in via extras above
 accelerate = "^0.21.0"
 llama-cpp-python = "^0.1.77"
 transformers = ">=4.28.1"
+aiohttp-sse-client = "^0.2.1"
 
 [build-system]
 requires = ["poetry-core"]
