@@ -39,6 +39,17 @@
     };
   in rec {
     legacyPackages = pkgs;
+    apps = {
+      lmtp-server = {
+        type = "app";
+        program = "${pkgs.writeShellScript "run-lmtp-server" ''
+          set -a
+          PATH=${packages.llamaDotCpp}/bin:$PATH
+          PYTHONPATH=${self}/src
+          exec ${poetryEnv}/bin/python -m lmql.cli serve-model "$@"
+        ''}";
+      };
+    };
     packages = {
       llamaDotCpp = llamaDotCppFlake.packages.${system}.default;
       python = poetryEnv;
