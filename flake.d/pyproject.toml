@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "lmql-deps"
+version = "0.999999"
+description = "poetry wrapper around the lmql query language for language models"
+authors = [
+  "Luca Beurer-Kellner",
+  "Marc Fischer",
+  "Martin Vechev",
+]
+homepage = "https://lmql.ai"
+documentation = "https://docs.lmql.ai"
+maintainers = ["The LMQL Team <hello@lmql.ai>"]
+license = "Apache-2.0"
+readme = "README.md"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+lmql = { path = "../", extras = ["llama", "hf"] }
+
+# FIXME: These _should_ have been pulled in via extras above
+accelerate = "^0.21.0"
+llama-cpp-python = "^0.1.77"
+transformers = ">=4.28.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
